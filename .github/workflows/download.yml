@@ -48,7 +48,7 @@ jobs:
           echo "--- Kết quả ---"
           ls -la output/
 
-      - name: Upload to catbox
+      - name: Upload to 0x0.st
         id: upload
         if: success()
         run: |
@@ -58,8 +58,12 @@ jobs:
             exit 1
           fi
           echo "Đang upload: $FILE"
-          URL=$(curl -s -F "reqtype=fileupload" -F "fileToUpload=@$FILE" https://catbox.moe/user/api.php)
+          URL=$(curl -s -F "file=@$FILE" -H "User-Agent: Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)" https://0x0.st)
           echo "Link video: $URL"
+          if [[ ! "$URL" =~ ^https:// ]]; then
+            echo "❌ Upload thất bại: $URL"
+            exit 1
+          fi
           echo "url=$URL" >> $GITHUB_OUTPUT
 
       - name: Save URL to repo

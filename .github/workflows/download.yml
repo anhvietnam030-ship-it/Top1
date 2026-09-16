@@ -33,6 +33,7 @@ jobs:
         run: |
           TITLE="${{ github.event.issue.title }}"
           URL="${TITLE#TIKTOK: }"
+          URL="${URL/www.tiktok.com/m.tiktok.com}"
           echo "url=$URL" >> $GITHUB_OUTPUT
 
       - name: Download video

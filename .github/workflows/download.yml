@@ -17,17 +17,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
-          python-version: '3.11'
+          node-version: '20'
 
-      - name: Install tools
+      - name: Install Playwright
         run: |
-          python3 -m pip install --upgrade pip
-          python3 -m pip install --upgrade yt-dlp curl_cffi
-          sudo apt-get update -qq
-          sudo apt-get install -y ffmpeg
+          npm init -y
+          npm i playwright
+          npx playwright install chromium --with-deps
 
       - name: Get URL from title
         id: extract
@@ -36,23 +35,10 @@ jobs:
           URL="${TITLE#TIKTOK: }"
           echo "url=$URL" >> $GITHUB_OUTPUT
 
-      - name: Download
+      - name: Download video
         env:
           TIKTOK_URL: ${{ steps.extract.outputs.url }}
-          TIKTOK_COOKIES: ${{ secrets.TIKTOK_COOKIES }}
-        run: |
-          mkdir -p output
-          echo "$TIKTOK_COOKIES" > cookies.txt
-          yt-dlp \
-            --no-playlist \
-            --cookies cookies.txt \
-            --impersonate chrome \
-            --merge-output-format mp4 \
-            --retries 5 \
-            -o "output/tiktok.%(ext)s" \
-            "$TIKTOK_URL"
-          rm cookies.txt
-          ls -la output/
+        run: node download.js
 
       - name: Upload Release
         if: success()

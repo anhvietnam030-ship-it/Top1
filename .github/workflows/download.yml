@@ -17,37 +17,42 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
-          node-version: '20'
+          python-version: '3.11'
 
-      - name: Install Playwright
+      - name: Install tools
         run: |
-          npm init -y
-          npm i playwright
-          npx playwright install chromium --with-deps
+          python3 -m pip install --upgrade pip
+          python3 -m pip install --upgrade yt-dlp curl_cffi
+          sudo apt-get update -qq
+          sudo apt-get install -y ffmpeg
 
       - name: Get URL from title
         id: extract
         run: |
           TITLE="${{ github.event.issue.title }}"
           URL="${TITLE#TIKTOK: }"
-          URL="${URL/www.tiktok.com/m.tiktok.com}"
           echo "url=$URL" >> $GITHUB_OUTPUT
 
-      - name: Download video
+      - name: Download
         env:
           TIKTOK_URL: ${{ steps.extract.outputs.url }}
-        run: node download.js
-
-      - name: Upload debug HTML
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: debug-page
-          path: output/page.html
-          if-no-files-found: ignore
+          TIKTOK_COOKIES: ${{ secrets.TIKTOK_COOKIES }}
+        run: |
+          mkdir -p output
+          echo "$TIKTOK_COOKIES" > cookies.txt
+          yt-dlp \
+            --no-playlist \
+            --cookies cookies.txt \
+            --impersonate chrome \
+            --merge-output-format mp4 \
+            --retries 5 \
+            -o "output/tiktok.%(ext)s" \
+            "$TIKTOK_URL"
+          rm cookies.txt
+          ls -la output/
 
       - name: Upload Release
         if: success()

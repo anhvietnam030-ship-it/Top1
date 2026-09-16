@@ -14,16 +14,24 @@ permissions:
 jobs:
   download:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
 
     steps:
       - uses: actions/checkout@v4
 
-            - name: Install yt-dlp
-        run: |
-          python3 -m pip install --upgrade yt-dlp curl_cffi
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
 
-          - name: Download video
+      - name: Install yt-dlp + curl_cffi + ffmpeg
+        run: |
+          python3 -m pip install --upgrade pip
+          python3 -m pip install --upgrade yt-dlp curl_cffi
+          sudo apt-get update -qq
+          sudo apt-get install -y ffmpeg
+
+      - name: Download video
         env:
           TIKTOK_URL: ${{ github.event.inputs.url }}
         run: |
@@ -32,19 +40,30 @@ jobs:
             --no-playlist \
             --impersonate chrome \
             --merge-output-format mp4 \
+            --no-warnings \
+            --retries 5 \
+            --fragment-retries 5 \
             -o "output/tiktok.%(ext)s" \
             "$TIKTOK_URL"
+          echo "--- Kết quả ---"
           ls -la output/
 
       - name: Upload to catbox
         id: upload
+        if: success()
         run: |
-          FILE=$(ls output/*.mp4 | head -1)
+          FILE=$(ls output/*.mp4 2>/dev/null | head -1)
+          if [ -z "$FILE" ]; then
+            echo "❌ Không có file mp4 nào"
+            exit 1
+          fi
+          echo "Đang upload: $FILE"
           URL=$(curl -s -F "reqtype=fileupload" -F "fileToUpload=@$FILE" https://catbox.moe/user/api.php)
-          echo "Video URL: $URL"
+          echo "Link video: $URL"
           echo "url=$URL" >> $GITHUB_OUTPUT
 
       - name: Save URL to repo
+        if: success()
         run: |
           echo "${{ steps.upload.outputs.url }}" > latest.txt
           git config user.name "github-actions"

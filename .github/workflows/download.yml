@@ -19,16 +19,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install yt-dlp
-        run: python3 -m pip install --upgrade yt-dlp
+            - name: Install yt-dlp
+        run: |
+          python3 -m pip install --upgrade yt-dlp curl_cffi
 
-      - name: Download video
+          - name: Download video
         env:
           TIKTOK_URL: ${{ github.event.inputs.url }}
         run: |
           mkdir -p output
-          yt-dlp --no-playlist --merge-output-format mp4 \
-            -o "output/tiktok.%(ext)s" "$TIKTOK_URL"
+          yt-dlp \
+            --no-playlist \
+            --impersonate chrome \
+            --merge-output-format mp4 \
+            -o "output/tiktok.%(ext)s" \
+            "$TIKTOK_URL"
+          ls -la output/
 
       - name: Upload to catbox
         id: upload

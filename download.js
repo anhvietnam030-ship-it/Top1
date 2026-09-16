@@ -11,7 +11,6 @@ if (!url) {
 const OUTPUT_DIR = 'output';
 fs.mkdirSync(OUTPUT_DIR, { recursive: true });
 
-// Extract video ID from URL
 const videoId = url.match(/\/video\/(\d+)/)?.[1] || url.match(/\/photo\/(\d+)/)?.[1];
 if (!videoId) {
   console.error('❌ Không lấy được video ID từ URL:', url);
@@ -34,7 +33,6 @@ console.log('🎬 Video ID:', videoId);
 
   const page = await context.newPage();
 
-  // Bắt network requests
   const videoUrls = new Map();
   page.on('response', (res) => {
     const u = res.url();
@@ -46,13 +44,11 @@ console.log('🎬 Video ID:', videoId);
     }
   });
 
-  // Mở embed URL
   const embedUrl = `https://www.tiktok.com/embed/v2/${videoId}`;
   console.log('🌐 Mở embed:', embedUrl);
   await page.goto(embedUrl, { waitUntil: 'networkidle', timeout: 60000 });
   await page.waitForTimeout(5000);
 
-  // Thử play
   try {
     const video = await page.$('video');
     if (video) {
@@ -73,7 +69,6 @@ console.log('🎬 Video ID:', videoId);
     process.exit(1);
   }
 
-  // Chọn file lớn nhất
   const sorted = [...videoUrls.entries()].sort((a, b) => b[1] - a[1]);
   const [bestUrl] = sorted[0];
   console.log(`🏆 Tải: ${bestUrl.slice(0, 100)}`);

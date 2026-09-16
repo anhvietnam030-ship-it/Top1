@@ -11,30 +11,28 @@ on:
 jobs:
   download:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 5
 
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Install Playwright
+      - name: Install yt-dlp
         run: |
-          npm init -y
-          npm i playwright
-          npx playwright install chromium --with-deps
+          python3 -m pip install --upgrade yt-dlp
 
       - name: Download video
         env:
           TIKTOK_URL: ${{ github.event.inputs.url }}
-        run: node download.js
+        run: |
+          mkdir -p output
+          yt-dlp \
+            --no-playlist \
+            --merge-output-format mp4 \
+            -o "output/tiktok.%(ext)s" \
+            "$TIKTOK_URL"
+          echo "---"
+          ls -la output/
 
       - name: Upload video
         uses: actions/upload-artifact@v4
         with:
           name: tiktok-video
           path: output/
-          retention-days: 7

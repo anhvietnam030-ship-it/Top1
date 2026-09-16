@@ -8,9 +8,6 @@ if (!url) {
   process.exit(1);
 }
 
-const OUTPUT_DIR = 'output';
-fs.mkdirSync(OUTPUT_DIR, { recursive: true });
-
 (async () => {
   const browser = await chromium.launch({
     headless: true,
@@ -33,28 +30,45 @@ fs.mkdirSync(OUTPUT_DIR, { recursive: true });
   await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
   await page.waitForTimeout(5000);
 
-  // DEBUG: dump cấu trúc JSON
-  const debugInfo = await page.evaluate(() => {
-    try {
-      const el = document.getElementById('__UNIVERSAL_DATA_FOR_REHYDRATION__');
-      if (!el) return { error: 'No data element' };
-      const data = JSON.parse(el.textContent);
-      const scope = data['__DEFAULT_SCOPE__'];
-      if (!scope) return { error: 'No default scope' };
+  // URL cuối cùng sau redirect
+  console.log('🔗 URL cuối:', page.url());
 
-      const detail = scope['webapp.video-detail'];
+  // Tiêu đề trang
+  console.log('📄 Title:', await page.title());
 
-      return {
-        detailKeys: detail ? Object.keys(detail) : null,
-        detailDump: detail ? JSON.stringify(detail).slice(0, 4000) : null,
-      };
-    } catch (e) {
-      return { error: e.message };
-    }
+  // Check các element có thể chứa data
+  const checks = await page.evaluate(() => {
+    const result = {};
+    result.hasUniversalData = !!document.getElementById('__UNIVERSAL_DATA_FOR_REHYDRATION__');
+    result.hasSIGI = !!document.getElementById('SIGI_STATE');
+    result.hasVideoTag = !!document.querySelector('video');
+    result.hasScripts = document.querySelectorAll('script').length;
+    result.bodyLength = document.body ? document.body.innerHTML.length : 0;
+
+    // List tất cả script có type application/json
+    const jsonScripts = [];
+    document.querySelectorAll('script[type="application/json"]').forEach((s, i) => {
+      jsonScripts.push({ id: s.id || `script-${i}`, len: s.textContent.length });
+    });
+    result.jsonScripts = jsonScripts;
+
+    // List ID của tất cả element có id
+    const ids = [];
+    document.querySelectorAll('[id]').forEach((el) => {
+      if (el.id) ids.push(el.id);
+    });
+    result.allIds = ids.slice(0, 50);
+
+    return result;
   });
 
-  console.log('🔍 DEBUG INFO:');
-  console.log(JSON.stringify(debugInfo, null, 2));
+  console.log('🔍 CHECKS:');
+  console.log(JSON.stringify(checks, null, 2));
+
+  // Lưu HTML để xem
+  const html = await page.content();
+  fs.writeFileSync('output/page.html', html);
+  console.log('💾 Đã lưu HTML:', html.length, 'chars');
 
   await browser.close();
   process.exit(0);

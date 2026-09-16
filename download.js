@@ -11,20 +11,18 @@ if (!url) {
 
 const OUTPUT_DIR = 'output';
 fs.mkdirSync(OUTPUT_DIR, { recursive: true });
+const finalOutput = path.join(OUTPUT_DIR, 'tiktok.mp4');
 
 (async () => {
   const browser = await chromium.launch({ headless: true });
   const context = await browser.newContext({
-    userAgent:
-      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
-      '(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
     viewport: { width: 1280, height: 720 },
   });
 
   const page = await context.newPage();
-  const streams = new Map(); // url -> type
+  const streams = new Map();
 
-  // Phân loại video / audio dựa vào URL và content-type
   page.on('response', (response) => {
     const u = response.url();
     const ct = response.headers()['content-type'] || '';
@@ -90,27 +88,30 @@ fs.mkdirSync(OUTPUT_DIR, { recursive: true });
     process.exit(1);
   }
 
+  let merged = false;
   if (audioFile) {
     console.log('\n🔧 Đang ghép hình + tiếng bằng ffmpeg...');
-    const outputFile = path.join(OUTPUT_DIR, 'tiktok.mp4');
     try {
-      execSync(
-        `ffmpeg -y -i "${videoFile}" -i "${audioFile}" -c:v copy -c:a aac -shortest "${outputFile}"`,
-        { stdio: 'inherit' }
-      );
-      console.log(`\n✅ Đã ghép xong: ${outputFile}`);
+      execSync(`ffmpeg -y -i "${videoFile}" -i "${audioFile}" -c:v copy -c:a aac -shortest "${finalOutput}"`, { stdio: 'inherit' });
+      console.log(`\n✅ Đã ghép xong: ${finalOutput}`);
+      merged = true;
     } catch (e) {
-      console.error('❌ ffmpeg lỗi:', e.message);
-      process.exit(1);
+      console.error('❌ ffmpeg lỗi, sẽ lưu video không tiếng:', e.message);
     }
-  } else {
-    console.log('⚠️ Không có audio, chỉ có video');
   }
 
-  // Dọn dẹp file rác, chỉ giữ tiktok.mp4
+  if (!merged) {
+    console.log('⚠️ Không có audio hoặc ffmpeg lỗi. Đang lưu video gốc...');
+    fs.copyFileSync(videoFile, finalOutput);
+  }
+
+  // Dọn dẹp: CHỈ xóa các file stream, GIỮ LẠI file tiktok.mp4
   fs.readdirSync(OUTPUT_DIR).forEach((f) => {
-    if (f.startsWith('stream-')) fs.unlinkSync(path.join(OUTPUT_DIR, f));
+    const fullPath = path.join(OUTPUT_DIR, f);
+    if (fullPath !== finalOutput) {
+      fs.unlinkSync(fullPath);
+    }
   });
 
-  console.log('\n🎉 Hoàn thành!');
+  console.log('\n🎉 Hoàn thành! File cuối: output/tiktok.mp4');
 })();

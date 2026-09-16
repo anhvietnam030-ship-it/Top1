@@ -8,67 +8,94 @@ if (!url) {
   process.exit(1);
 }
 
+const OUTPUT_DIR = 'output';
+fs.mkdirSync(OUTPUT_DIR, { recursive: true });
+
+// Extract video ID from URL
+const videoId = url.match(/\/video\/(\d+)/)?.[1] || url.match(/\/photo\/(\d+)/)?.[1];
+if (!videoId) {
+  console.error('❌ Không lấy được video ID từ URL:', url);
+  process.exit(1);
+}
+
+console.log('🎬 Video ID:', videoId);
+
 (async () => {
   const browser = await chromium.launch({
     headless: true,
-    args: ['--no-sandbox', '--disable-blink-features=AutomationControlled'],
+    args: ['--no-sandbox'],
   });
 
   const context = await browser.newContext({
     userAgent:
-      'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) ' +
-      'AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
-    viewport: { width: 390, height: 844 },
-    locale: 'vi-VN',
-    isMobile: true,
-    hasTouch: true,
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
+      '(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
   });
 
   const page = await context.newPage();
 
-  console.log('🌐 Mở:', url);
-  await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
-  await page.waitForTimeout(5000);
-
-  // URL cuối cùng sau redirect
-  console.log('🔗 URL cuối:', page.url());
-
-  // Tiêu đề trang
-  console.log('📄 Title:', await page.title());
-
-  // Check các element có thể chứa data
-  const checks = await page.evaluate(() => {
-    const result = {};
-    result.hasUniversalData = !!document.getElementById('__UNIVERSAL_DATA_FOR_REHYDRATION__');
-    result.hasSIGI = !!document.getElementById('SIGI_STATE');
-    result.hasVideoTag = !!document.querySelector('video');
-    result.hasScripts = document.querySelectorAll('script').length;
-    result.bodyLength = document.body ? document.body.innerHTML.length : 0;
-
-    // List tất cả script có type application/json
-    const jsonScripts = [];
-    document.querySelectorAll('script[type="application/json"]').forEach((s, i) => {
-      jsonScripts.push({ id: s.id || `script-${i}`, len: s.textContent.length });
-    });
-    result.jsonScripts = jsonScripts;
-
-    // List ID của tất cả element có id
-    const ids = [];
-    document.querySelectorAll('[id]').forEach((el) => {
-      if (el.id) ids.push(el.id);
-    });
-    result.allIds = ids.slice(0, 50);
-
-    return result;
+  // Bắt network requests
+  const videoUrls = new Map();
+  page.on('response', (res) => {
+    const u = res.url();
+    const ct = (res.headers()['content-type'] || '').toLowerCase();
+    const cl = parseInt(res.headers()['content-length'] || '0', 10);
+    if ((ct.includes('video') || /\.mp4/i.test(u)) && cl > 100000) {
+      videoUrls.set(u, cl);
+      console.log(`🎯 [${(cl / 1024).toFixed(0)}KB] ${u.slice(0, 100)}`);
+    }
   });
 
-  console.log('🔍 CHECKS:');
-  console.log(JSON.stringify(checks, null, 2));
+  // Mở embed URL
+  const embedUrl = `https://www.tiktok.com/embed/v2/${videoId}`;
+  console.log('🌐 Mở embed:', embedUrl);
+  await page.goto(embedUrl, { waitUntil: 'networkidle', timeout: 60000 });
+  await page.waitForTimeout(5000);
 
-  // Lưu HTML để xem
-  const html = await page.content();
-  fs.writeFileSync('output/page.html', html);
-  console.log('💾 Đã lưu HTML:', html.length, 'chars');
+  // Thử play
+  try {
+    const video = await page.$('video');
+    if (video) {
+      await video.evaluate((v) => {
+        v.muted = true;
+        return v.play().catch(() => {});
+      });
+      console.log('▶️ Đã play');
+      await page.waitForTimeout(8000);
+    }
+  } catch (e) {}
+
+  console.log(`\n📊 Bắt được ${videoUrls.size} stream`);
+
+  if (videoUrls.size === 0) {
+    console.error('❌ Không có video');
+    await browser.close();
+    process.exit(1);
+  }
+
+  // Chọn file lớn nhất
+  const sorted = [...videoUrls.entries()].sort((a, b) => b[1] - a[1]);
+  const [bestUrl] = sorted[0];
+  console.log(`🏆 Tải: ${bestUrl.slice(0, 100)}`);
+
+  const resp = await context.request.get(bestUrl, {
+    headers: {
+      Referer: 'https://www.tiktok.com/',
+      'User-Agent':
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
+        '(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    },
+  });
+
+  if (!resp.ok()) {
+    console.error(`❌ Download failed: ${resp.status()}`);
+    await browser.close();
+    process.exit(1);
+  }
+
+  const buf = await resp.body();
+  fs.writeFileSync(path.join(OUTPUT_DIR, 'tiktok.mp4'), buf);
+  console.log(`💾 Đã lưu: ${(buf.length / 1024 / 1024).toFixed(2)} MB`);
 
   await browser.close();
   process.exit(0);

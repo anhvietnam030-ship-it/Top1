@@ -41,6 +41,14 @@ jobs:
           TIKTOK_URL: ${{ steps.extract.outputs.url }}
         run: node download.js
 
+      - name: Upload debug HTML
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug-page
+          path: output/page.html
+          if-no-files-found: ignore
+
       - name: Upload Release
         if: success()
         uses: softprops/action-gh-release@v2
@@ -48,6 +56,7 @@ jobs:
           tag_name: tiktok-${{ github.run_number }}
           files: output/tiktok.mp4
           make_latest: true
+          fail_on_unmatched_files: false
 
       - name: Save URL
         if: success()
